@@ -1,0 +1,23 @@
+% PARETO-EDIT main benchmark table (auto-generated)
+\begin{table*}[t]
+\centering
+\small
+\caption{Multi-objective benchmark over 6 SNV instances $\times$ 30 seeds. \emph{Small} regime: exact Pareto front enumerable (recovery = fraction of true front found). \emph{Scaled} regime: enlarged design space ($\sim$1296 designs) under a capped evaluation budget; IGD computed against a proxy reference front. HV: higher is better; IGD/Spacing: lower is better; oracle calls: lower is cheaper.}
+\label{tab:benchmark}
+\begin{tabular}{llrrrrr}
+\toprule
+Regime & Method & HV $\uparrow$ & IGD $\downarrow$ & Spacing $\downarrow$ & Oracle calls $\downarrow$ & Recovery $\uparrow$ \\
+\midrule
+small & NSGA-II & 0.7211 $\pm$ 0.1433 & 0.0008 $\pm$ 0.0058 & 0.0770 & 102 & 0.992 \\
+ & CPO--GWO & 0.7173 $\pm$ 0.1460 & 0.0066 $\pm$ 0.0200 & 0.0775 & 75 & 0.940 \\
+ & Weighted-sum & 0.7100 $\pm$ 0.1453 & 0.1198 $\pm$ 0.1191 & 0.1025 & 150 & 0.568 \\
+ & Random search & 0.6934 $\pm$ 0.1453 & 0.0304 $\pm$ 0.0332 & 0.0853 & 200 & 0.744 \\
+\midrule
+scaled & NSGA-II & 0.7383 $\pm$ 0.1341 & 0.0165 $\pm$ 0.0171 & 0.0944 & 218 & -- \\
+ & CPO--GWO & 0.7237 $\pm$ 0.1384 & 0.0348 $\pm$ 0.0533 & 0.0989 & 159 & -- \\
+ & Weighted-sum & 0.7314 $\pm$ 0.1504 & 0.2006 $\pm$ 0.1475 & 0.0864 & 1080 & -- \\
+ & Random search & 0.6572 $\pm$ 0.1313 & 0.0923 $\pm$ 0.0534 & 0.0925 & 280 & -- \\
+\midrule
+\bottomrule
+\end{tabular}
+\end{table*}

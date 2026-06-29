@@ -1,0 +1,5 @@
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+matplotlib>=3.7
+pymoo>=0.6   # optional: HV/IGD cross-validation only
