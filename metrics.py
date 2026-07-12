@@ -161,6 +161,12 @@ def exhaustive_front(snv: SNVContext, oracle):
     """Ground-truth Pareto front by full enumeration (feasible because the space is small).
     Used as the IGD reference front and to verify optimizer optimality."""
     designs = enumerate_designs(snv)
+    if not designs:
+        raise ValueError(
+            f"enumerate_designs returned no designs for {snv.chrom}:{snv.pos} "
+            f"{snv.ref}>{snv.alt} (target_base={snv.target_base!r}, "
+            f"required_edit={snv.required_edit!r}). Check the loader/suite sets both."
+        )
     F = np.array([evaluate(d, snv, oracle) for d in designs])
     nd = non_dominated_mask(F)
     return [designs[i] for i in np.where(nd)[0]], F[nd]

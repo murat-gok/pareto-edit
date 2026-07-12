@@ -25,14 +25,13 @@ A base editor edits a base on the protospacer (sense) strand: CBE does C->T, ABE
 must perform the conversion that turns the ALT base into the REF base on one of the two strands.
 Concretely, on the genomic +/- strands the correctable pathogenic ref>alt classes are:
 
-    CBE  (C->T): corrects  G>A (+ strand: A->G is ABE; but C->T on - strand fixes G>A),
-                 and       C>T  read on the complementary strand.
-    ABE  (A->G): corrects  T>C and A>G-type lesions via A->G on the appropriate strand.
+    ABE  (A->G): corrects  G>A (revert A->G on + strand) and C>T (revert via A->G on - strand).
+    CBE  (C->T): corrects  T>C (revert C->T on + strand) and A>G (revert via C->T on - strand).
 
-To keep the Phase-2 loader transparent and auditable we encode the canonical mapping used in
-the base-editing literature (e.g. the BE patent ClinVar survey): the four transition classes
-G>A, C>T (CBE-correctable) and T>C, A>G (ABE-correctable) are the base-editable transitions.
-Transversions (e.g. C>G) are only CGBE-relevant and are flagged separately.
+The four base-editable transition classes are therefore G>A, C>T (ABE-correctable) and
+T>C, A>G (CBE-correctable). Transversions (e.g. C>G) are only CGBE-relevant and are flagged
+separately. Each class also carries the full required_edit conversion so that downstream
+enumeration admits only editors whose entire chemistry matches the correction.
 
 The loader emits, for each kept variant, the editor *chemistry* (target_base) needed and the
 flanking genomic context (if a reference FASTA is supplied; otherwise context is left empty and
@@ -54,14 +53,24 @@ CLINVAR_TSV_URL = "https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/varian
 # sense-strand target base the editor must convert. (Complement handled by strand choice.)
 #   key = (ref, alt) on the reported strand
 #   value = (chemistry, target_base_on_sense_strand)
+# key = (ref, alt) pathogenic transition on the reported (+) strand
+# value = (chemistry, target_base, required_edit)
+#   target_base  = the base the editor DEAMINATES (sense-strand identity)
+#   required_edit= the full correction conversion the editor must perform, (from, to).
+#                  enumerate_designs() matches an editor's full edit pair against this, so a
+#                  transversion editor (CGBE, C->G) is never admitted for a C->T correction.
+#   G>A: revert A->G -> deaminate A (sense)          -> ABE, ("A","G")
+#   C>T: revert T->C -> deaminate A on (-) strand    -> ABE, ("A","G")  [antisense]
+#   T>C: revert C->T -> deaminate C (sense)          -> CBE, ("C","T")
+#   A>G: revert G->A -> deaminate C on (-) strand    -> CBE, ("C","T")  [antisense]
 BASE_EDITABLE = {
-    ("G", "A"): ("CBE", "C"),   # correct A->G on (-) strand == C->T sense; CBE
-    ("C", "T"): ("CBE", "C"),   # CBE corrects the T back to C (read on complementary strand)
-    ("T", "C"): ("ABE", "A"),   # ABE
-    ("A", "G"): ("ABE", "A"),   # ABE
+    ("G", "A"): ("ABE", "A", ("A", "G")),
+    ("C", "T"): ("ABE", "A", ("A", "G")),
+    ("T", "C"): ("CBE", "C", ("C", "T")),
+    ("A", "G"): ("CBE", "C", ("C", "T")),
 }
 # transversions correctable only by CGBE (flagged, not used by default)
-CGBE_EDITABLE = {("C", "G"): ("CGBE", "C"), ("G", "C"): ("CGBE", "C")}
+CGBE_EDITABLE = {("C", "G"): ("CGBE", "C", ("C", "G")), ("G", "C"): ("CGBE", "G", ("G", "C"))}
 
 
 @dataclass
@@ -73,7 +82,8 @@ class ClinVarVariant:
     gene: str
     clinical_significance: str
     chemistry: str          # CBE / ABE / CGBE
-    target_base: str        # base the editor converts on the sense strand
+    target_base: str        # base the editor deaminates on the sense strand
+    required_edit: tuple    # full correction conversion, e.g. ("A","G") for a G>A lesion
     name: str               # ClinVar variant name / HGVS
 
 
@@ -128,7 +138,7 @@ def stream_variant_summary(
             mapping = editable.get((ref, alt))
             if mapping is None:
                 continue
-            chem, tb = mapping
+            chem, tb, req_edit = mapping
             try:
                 pos = int(parts[col["Start"]])
             except ValueError:
@@ -138,7 +148,7 @@ def stream_variant_summary(
                 pos=pos, ref=ref, alt=alt,
                 gene=parts[col["GeneSymbol"]],
                 clinical_significance=parts[col["ClinicalSignificance"]],
-                chemistry=chem, target_base=tb,
+                chemistry=chem, target_base=tb, required_edit=req_edit,
                 name=parts[col["Name"]],
             )
             kept += 1
@@ -152,7 +162,7 @@ def variant_to_snv(v: ClinVarVariant, flank: str = "") -> SNVContext:
     surrogate synthesises context (Phase-0 behaviour)."""
     return SNVContext(
         chrom=v.chrom, pos=v.pos, ref=v.ref, alt=v.alt,
-        target_base=v.target_base, context=flank,
+        target_base=v.target_base, required_edit=v.required_edit, context=flank,
     )
 
 
@@ -187,14 +197,14 @@ def synthetic_clinvar_problems(n: int = 10, seed: int = 0) -> List[ClinVarVarian
     classes = list(BASE_EDITABLE.items())
     out = []
     for i in range(n):
-        (ref, alt), (chem, tb) = classes[i % len(classes)]
+        (ref, alt), (chem, tb, req_edit) = classes[i % len(classes)]
         out.append(ClinVarVariant(
             chrom=str(int(rng.integers(1, 23))),
             pos=int(rng.integers(1_000_000, 200_000_000)),
             ref=ref, alt=alt,
             gene=genes[i % len(genes)],
             clinical_significance="Pathogenic",
-            chemistry=chem, target_base=tb,
+            chemistry=chem, target_base=tb, required_edit=req_edit,
             name=f"NM_000000.0(GENE):c.{i}{ref}>{alt}",
         ))
     return out

@@ -64,6 +64,9 @@ def main():
                     help="path to Doench 2016 pam_scores.pkl (optional)")
     ap.add_argument("--high-purity", type=float, default=0.50,
                     help="purity threshold for flagging loci with no high-purity option")
+    ap.add_argument("--min-efficiency", type=float, default=0.05,
+                    help="designs with predicted efficiency below this are non-actionable and "
+                         "excluded from the reported front (default 0.05; set 0 to disable)")
     ap.add_argument("--direct-only", action="store_true",
                     help="restrict the catalogue to editors with a direct (non-proxy) BE-Hive "
                          "model (excludes YE1, CGBE1); use for the primary analysis")
@@ -167,7 +170,12 @@ def main():
             print(f"{label}: optimization failed ({e})")
             continue
         rep = pipe.report(res, snv, top=10**9)
-        front_sizes.append(len(res.objectives))
+        if args.min_efficiency > 0:
+            rep = [r for r in rep if r["efficiency"] >= args.min_efficiency]
+        if not rep:
+            print(f"{label}: no design above min-efficiency {args.min_efficiency}")
+            continue
+        front_sizes.append(len(rep))
         calls_list.append(res.n_evals)
         purities = [r["bystander_purity"] for r in rep]
         effs = [r["efficiency"] for r in rep]
@@ -183,13 +191,13 @@ def main():
             r["proxy_editor"] = is_px
             n_proxy_designs += int(is_px)
         records.append({"locus": label, "context": ctx_note,
-                        "front_size": len(res.objectives), "be_hive_calls": res.n_evals,
+                        "front_size": len(rep), "be_hive_calls": res.n_evals,
                         "max_purity": max(purities) if purities else None,
                         "max_efficiency": max(effs) if effs else None,
-                        "front": rep[:10]})
+                        "front": rep})
 
         if len(records) <= 10:
-            print(f"### {label}  [{ctx_note}]  front={len(res.objectives)} "
+            print(f"### {label}  [{ctx_note}]  front={len(rep)} "
                   f"BE-Hive calls={res.n_evals}")
             for r in rep[:6]:
                 px = "  (proxy)" if r.get("proxy_editor") else ""

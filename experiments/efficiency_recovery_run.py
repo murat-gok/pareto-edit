@@ -121,6 +121,9 @@ def main():
                     help="guides per synthetic panel for top-k recovery")
     ap.add_argument("--top-k", type=int, default=1)
     ap.add_argument("--efficiency-calibration", default=None)
+    ap.add_argument("--efficiency-model", default=None,
+                    help="path to a trained efficiency model pickle (train_efficiency_model.py). "
+                         "If given, uses the trained model instead of the biophysical surrogate.")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out-json", default="efficiency_recovery.json")
     args = ap.parse_args()
@@ -155,12 +158,28 @@ def main():
         calibrator = CalibratedEfficiency.load(args.efficiency_calibration)
 
     surrogate = SurrogateOracle()
+
+    # Optional: use a dedicated trained efficiency model (reviewer #1) instead of the surrogate.
+    trained = None
+    if args.efficiency_model:
+        from oracles.deep_efficiency import DeepEfficiencyOracle
+        trained = DeepEfficiencyOracle.from_pickle(args.efficiency_model)
+        print(f"Efficiency source: TRAINED model ({args.efficiency_model})")
+    else:
+        print("Efficiency source: biophysical surrogate"
+              + (" + calibration" if calibrator else ""))
+
     pred, meas, used_editor = [], [], []
     for _, row in df.iterrows():
         ed = row["catalogue_editor"]
-        e = predict_efficiency(surrogate, calibrator, ed,
-                               row.get("sequence", ""), row.get("grna", ""),
-                               row.get("pam_sequence", ""))
+        if trained is not None:
+            # trained model scores directly from the protospacer + editor
+            proto = str(row.get("grna", "") or row.get("sequence", ""))[:20]
+            e = trained._predict_efficiency(proto, str(row["base_editor"]))
+        else:
+            e = predict_efficiency(surrogate, calibrator, ed,
+                                   row.get("sequence", ""), row.get("grna", ""),
+                                   row.get("pam_sequence", ""))
         if e is None:
             continue
         pred.append(e)

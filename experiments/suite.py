@@ -48,13 +48,14 @@ def make_problems(n_per_chem: int = 6, seed: int = 0) -> List[Problem]:
     real ClinVar pathogenic SNVs with GRCh38 context."""
     rng = np.random.default_rng(seed)
     problems: List[Problem] = []
-    for chem, tb, alt in [("CBE", "C", "T"), ("ABE", "A", "G")]:
+    for chem, tb, alt, req in [("CBE", "C", "T", ("C", "T")), ("ABE", "A", "G", ("A", "G"))]:
         for i in range(n_per_chem):
             chrom = f"chr{int(rng.integers(1, 23))}"
             pos = int(rng.integers(1_000_000, 200_000_000))
             problems.append(Problem(
                 name=f"{chem}-{i+1:02d}",
-                snv=SNVContext(chrom=chrom, pos=pos, ref="X", alt=alt, target_base=tb),
+                snv=SNVContext(chrom=chrom, pos=pos, ref="X", alt=alt,
+                               target_base=tb, required_edit=req),
             ))
     return problems
 

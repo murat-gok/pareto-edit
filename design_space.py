@@ -110,7 +110,11 @@ class SNVContext:
     alt: str
     flank_5: str = ""
     flank_3: str = ""
-    target_base: str = "C"      # identity of the base to be edited (sense-strand)
+    target_base: str = ""       # substrate the editor must DEAMINATE (sense-strand)
+    required_edit: Tuple[str, str] = ("", "")  # the full correction conversion, e.g. ("A","G")
+                                # for a G>A lesion (revert A->G). Set by the ClinVar loader.
+                                # Empty = unset. This is what makes an edit a CORRECTION,
+                                # not merely "some edit at the target base".
     # local context window centered on the target base (for bystander detection)
     context: str = field(default="")
 
@@ -135,7 +139,7 @@ class SNVContext:
             # build a long context (>= 2*PROTOSPACER_LEN) so any placement has full flanks
             long_ctx = "".join(bases[int(c, 16) % 4] for c in (h * 3)[: 2 * PROTOSPACER_LEN + 1])
             long_ctx = list(long_ctx)
-            long_ctx[PROTOSPACER_LEN] = self.target_base  # target base at the center
+            long_ctx[PROTOSPACER_LEN] = self.target_base or "C"  # center = substrate (surrogate fallback)
             long_ctx = "".join(long_ctx)
 
         # Place the protospacer so the target base (at center index PROTOSPACER_LEN) lands at
@@ -146,7 +150,7 @@ class SNVContext:
         # guarantee correct length and target identity
         window = (window + "A" * PROTOSPACER_LEN)[:PROTOSPACER_LEN]
         w = list(window)
-        w[design.target_pos - 1] = self.target_base
+        w[design.target_pos - 1] = self.target_base or "C"
         return "".join(w)
 
 
@@ -164,11 +168,18 @@ def enumerate_designs(snv: SNVContext, exclude_editors=None) -> List[Design]:
     """
     exclude = set(exclude_editors or ())
     designs: List[Design] = []
+    if not snv.target_base or snv.required_edit == ("", ""):
+        # Unset substrate/edit (or a transversion the loader could not map to CBE/ABE):
+        # return nothing rather than silently enumerating the wrong chemistry.
+        return designs
     for ed_name, ed in EDITORS.items():
         if ed_name in exclude:
             continue
-        # chemistry check: editor must convert the target base
-        if ed.edit[0] != snv.target_base:
+        # chemistry check: the editor's FULL conversion must equal the required correction
+        # (input base AND product). Matching only ed.edit[0] would wrongly admit CGBE
+        # (C->G) for a C->T correction, so we compare the whole pair. This is what makes
+        # the admitted edit an actual CORRECTION rather than merely "an edit at the target".
+        if tuple(ed.edit) != tuple(snv.required_edit):
             continue
         for pam_name in PAM_VARIANTS:
             for pos in range(OFFSET_RANGE[0], OFFSET_RANGE[1] + 1):
@@ -181,6 +192,6 @@ def search_bounds(snv: SNVContext, exclude_editors=None) -> Tuple[List[str], Lis
     restricted to editors whose chemistry matches the SNV (and not in exclude_editors)."""
     exclude = set(exclude_editors or ())
     editors = [k for k, v in EDITORS.items()
-               if v.edit[0] == snv.target_base and k not in exclude]
+               if tuple(v.edit) == tuple(snv.required_edit) and k not in exclude]
     pams = list(PAM_VARIANTS.keys())
     return editors, pams, OFFSET_RANGE

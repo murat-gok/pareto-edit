@@ -52,3 +52,17 @@ METHODS_optimizers.md
 CANONICAL_RUN.md
 APPROACH_A.md
 gitignore.txt
+
+# === Additional run outputs & scratch (added during R1 fix + Phase-3 revisions) ===
+layer2_full_*.json
+layer2_smoke.json
+tool_comparison.json
+purity_recovery.json
+trained_efficiency.pkl
+files.zip
+# backup files from in-place edits
+*.bak
+*.bak2
+# helper scripts (not part of the package)
+apply_R1_fix.sh
+check_chemistry.py

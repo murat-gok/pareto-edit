@@ -43,6 +43,7 @@ import design_space as ds_mod
 from oracles.surrogate import SurrogateOracle
 from optimizers.nsga2 import NSGA2
 from optimizers.cpo_gwo import CPO_GWO
+from optimizers.nsga3 import NSGA3
 from pipeline import ParetoEditPipeline
 from metrics import (
     exhaustive_front, hypervolume, igd, spacing,
@@ -146,6 +147,8 @@ def evaluate_run(regime, problem_name, method, snv, oracle, seed, gt_designs, gt
 
     if method == "NSGA-II":
         d, F, ne = _run_optimizer(NSGA2, dict(pop_size=40, n_gen=max(8, budget // 40)), snv, oracle, seed)
+    elif method == "NSGA-III":
+        d, F, ne = _run_optimizer(NSGA3, dict(pop_size=40, n_gen=max(8, budget // 40)), snv, oracle, seed)
     elif method == "CPO-GWO":
         d, F, ne = _run_optimizer(CPO_GWO, dict(pop_size=40, n_gen=max(8, budget // 40)), snv, oracle, seed)
     elif method == "WeightedSum":
@@ -178,8 +181,8 @@ def evaluate_run(regime, problem_name, method, snv, oracle, seed, gt_designs, gt
 # Benchmark driver
 # --------------------------------------------------------------------------- #
 
-METHODS = ["NSGA-II", "CPO-GWO", "WeightedSum", "EpsilonConstraint", "ParetoFilter", "Random"]
-
+#METHODS = ["NSGA-II", "CPO-GWO", "WeightedSum", "EpsilonConstraint", "ParetoFilter", "Random"]
+METHODS = ["NSGA-II", "NSGA-III", "CPO-GWO", "WeightedSum", "EpsilonConstraint", "ParetoFilter", "Random"]
 
 def run_regime(regime: str, problems, seeds: List[int], oracle, budget: int,
                enumerate_gt: bool) -> List[Record]:
@@ -203,7 +206,7 @@ def _proxy_reference(snv, oracle, seeds, budget):
     from objectives import evaluate
     allF = []
     for s in seeds[: min(5, len(seeds))]:
-        for OptCls in (NSGA2, CPO_GWO):
+        for OptCls in (NSGA2, NSGA3, CPO_GWO):
             _, F, _ = _run_optimizer(OptCls, dict(pop_size=40, n_gen=max(8, budget // 40)),
                                      snv, oracle, s)
             allF.append(F)
@@ -395,10 +398,9 @@ def _figures(df, g):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    colors = {"NSGA-II": "#1f77b4", "CPO-GWO": "#d62728",
+    colors = {"NSGA-II": "#1f77b4", "NSGA-III": "#2ca02c", "CPO-GWO": "#d62728",
               "WeightedSum": "#2ca02c", "EpsilonConstraint": "#9467bd",
               "ParetoFilter": "#8c564b", "Random": "#7f7f7f"}
-
     # HV by method per regime (box-ish bar with std)
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
     for ax, regime in zip(axes, ["small", "scaled"]):
