@@ -88,7 +88,27 @@ for r in pipe.report(res, snv):
           "offtgt", round(r["offtarget_risk"], 2))
 ```
 
-Run scripts as modules from the project root, e.g.:
+### Minimal example (no downloads, surrogate oracle)
+
+A small self-contained test input is provided in `examples/`. From the project root:
+
+```bash
+python -m experiments.run_example --input examples/example_snvs.csv --out out.csv
+```
+
+This runs the surrogate (offline) oracle, so it needs no downloads or GPU. It prints each
+locus's Pareto-front size and writes the non-dominated designs to `out.csv`, whose columns
+(`locus, editor, pam_variant, target_pos, efficiency, bystander_purity, offtarget_risk`)
+match `examples/expected_output.csv`. Expected console output:
+
+```
+chr11:5226778A>G: Pareto front = 3 non-dominated designs
+chr2:96254050G>A: Pareto front = 4 non-dominated designs
+chr14:77444311G>A: Pareto front = 1 non-dominated designs
+Wrote 8 designs across all loci to out.csv
+```
+
+Run the larger experiments as modules from the project root, e.g.:
 
 ```bash
 python -m experiments.benchmark --seeds 30 --per-chem 4   # Layer-1 benchmark
@@ -115,22 +135,33 @@ oracles/
   efficiency_calibration.py  quantile-map surrogate efficiency to BE-dataHIVE measurements
 data/
   clinvar.py, genome.py, be_datahive.py   data loaders
+optimizers/
+  nsga3.py                 from-scratch NSGA-III (reference-point niching; numpy-only)
 experiments/
-  benchmark.py             Layer-1 benchmark harness (6 methods)
+  benchmark.py             Layer-1 benchmark harness (7 methods incl. NSGA-III)
   layer2_application.py    Layer-2 real-model application over ClinVar loci
   ablation.py              objective-dropping + hyperparameter sensitivity
+  tool_comparison_run.py   front vs single-composite recommendation
+  purity_recovery_run.py   measured-purity validation (Arbab 2020)
+  train_efficiency_model.py  sequence-trained efficiency model (grouped train/test split)
   efficiency_recovery_run.py  guide-level efficiency recovery on BE-dataHIVE targets
   fetch_be_datahive.py     resilient BE-dataHIVE downloader
+  run_example.py           minimal end-to-end example (surrogate oracle)
+examples/
+  example_snvs.csv         small test input (3 pathogenic SNVs)
+  expected_output.csv      example Pareto-front output
 ```
 
 ---
 
 ## Reproducing the paper
 
-The exact command sequence that produces every number in the manuscript (benchmark, 150-locus
-application, ablations, recovery) is documented in the development tree's run guide. In brief:
-fit the efficiency calibration, run the Layer-1 benchmark, run the Layer-2 application over 150
-ClinVar loci with the real BE-Hive/CFD oracles, then run the ablations and recovery.
+The exact command sequence that produces every number in the manuscript is documented in
+[`REPRODUCIBILITY.md`](REPRODUCIBILITY.md). In brief: run the minimal example
+(`examples/`) to verify the install, run the Layer-1 benchmark (7 optimizers, surrogate),
+train the efficiency model with a protospacer-grouped split, then run the Layer-2 application
+over 150 ClinVar loci with the real BE-Hive/CFD oracles, followed by the tool comparison,
+the measured-purity validation (Arbab 2020), and the ablations.
 
 ---
 

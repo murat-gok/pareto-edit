@@ -1,0 +1,4 @@
+chrom,pos,ref,alt,target_base,required_edit
+chr11,5226778,A,G,C,C>T
+chr2,96254050,G,A,A,A>G
+chr14,77444311,G,A,A,A>G

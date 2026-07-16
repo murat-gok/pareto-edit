@@ -1,5 +1,14 @@
+# Core dependencies
 numpy>=1.26
 scipy>=1.11
 pandas>=2.0
 matplotlib>=3.7
-pymoo>=0.6   # optional: HV/IGD cross-validation only
+scikit-learn>=1.3        # experiments/train_efficiency_model.py (HistGradientBoosting, grouped split)
+requests>=2.31           # data/genome.py Ensembl REST fetch; fetch_be_datahive*.py
+pymoo>=0.6               # optional: HV/IGD cross-validation only
+
+# Optional (real-model biological analysis only; not needed for the surrogate benchmark
+# or the minimal example in examples/):
+#   torch>=2.0           # BE-Hive bystander model
+#   torchvision>=0.15    # BE-Hive dependency
+#   pyarrow>=14          # reading BE-dataHIVE parquet shards
