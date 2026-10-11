@@ -75,6 +75,18 @@ def main():
     ap.add_argument("--efficiency-calibration", default=None,
                     help="path to efficiency_calibration.json (from oracles.efficiency_calibration "
                          "fit); if given, efficiency is calibrated to BE-dataHIVE measurements")
+    ap.add_argument("--collapse-pam", action="store_true",
+                    help="enumerate one design per (editor, position) instead of the full "
+                         "cross product over PAM variants. Under the real-model composition "
+                         "no objective reads the PAM, so every PAM variant at a placement is "
+                         "an exact tie that inflates the front and wastes oracle calls. See "
+                         "design_space.enumerate_designs.")
+    ap.add_argument("--efficiency-model", default=None,
+                    help="path to the trained sequence-model pickle (from "
+                         "experiments/train_efficiency_model.py). If given, efficiency comes "
+                         "from DeepEfficiencyOracle instead of the surrogate. This is the "
+                         "composition the manuscript describes; without it the run uses the "
+                         "surrogate, which is NOT the same experiment.")
     ap.add_argument("--aggregate-offtarget", action="store_true",
                     help="use the genome-aware-style aggregate-CFD specificity score (Hsu 2013, "
                          "seed-region near-cognate aggregation) instead of single-mismatch "
@@ -105,14 +117,28 @@ def main():
         print("Off-target: single-mismatch CFD propensity (pass --aggregate-offtarget for "
               "genome-aware-style aggregate scoring)")
     eff_cal = None
-    if args.efficiency_calibration:
-        from oracles.efficiency_calibration import CalibratedEfficiency
-        eff_cal = CalibratedEfficiency.load(args.efficiency_calibration)
-        print("Efficiency: surrogate calibrated to BE-dataHIVE measurements "
-              f"({args.efficiency_calibration})")
+    if args.efficiency_model:
+        # The composition the manuscript describes: purity <- BE-Hive, off-target <- CFD,
+        # efficiency <- the sequence-trained model (held-out Spearman 0.58).
+        from oracles.deep_efficiency import DeepEfficiencyOracle
+        eff_source = DeepEfficiencyOracle.from_pickle(args.efficiency_model)
+        if args.efficiency_calibration:
+            print("Ignoring --efficiency-calibration: it calibrates the surrogate, and "
+                  "--efficiency-model replaces the surrogate entirely.")
+        print(f"Efficiency: sequence-trained model ({args.efficiency_model})")
     else:
-        print("Efficiency: surrogate (uncalibrated; pass --efficiency-calibration to calibrate)")
-    oracle = CompositeOracle(efficiency_source=surrogate,  # efficiency: calibrated surrogate
+        eff_source = surrogate
+        if args.efficiency_calibration:
+            from oracles.efficiency_calibration import CalibratedEfficiency
+            eff_cal = CalibratedEfficiency.load(args.efficiency_calibration)
+            print("Efficiency: surrogate calibrated to BE-dataHIVE measurements "
+                  f"({args.efficiency_calibration})")
+        else:
+            print("Efficiency: surrogate (uncalibrated; pass --efficiency-calibration to "
+                  "calibrate, or --efficiency-model for the sequence-trained model)")
+        print("  NOTE: this is NOT the composition described in the manuscript, which names "
+              "the sequence-trained model for efficiency. Pass --efficiency-model.")
+    oracle = CompositeOracle(efficiency_source=eff_source,
                              purity_source=behive,          # purity: REAL BE-Hive  (novel)
                              offtarget_source=cfd,          # off-target: CFD (Doench 2016)
                              efficiency_calibrator=eff_cal)
@@ -163,7 +189,8 @@ def main():
         n_real_ctx += int(ok)
         ctx_note = "real GRCh38" if ok else "SYNTHETIC (flank unavailable)"
         pipe = ParetoEditPipeline(oracle=oracle, optimizer=NSGA2(pop_size=30, n_gen=20),
-                                  exclude_editors=exclude)
+                                  exclude_editors=exclude,
+                                  collapse_pam=args.collapse_pam)
         try:
             res = pipe.run(snv, seed=0)
         except Exception as e:
@@ -209,6 +236,13 @@ def main():
     n = len(front_sizes)
     if n:
         summary = {
+            "efficiency_source": ("sequence_trained_model" if args.efficiency_model
+                                  else ("surrogate_calibrated" if args.efficiency_calibration
+                                        else "surrogate")),
+            "efficiency_model_path": args.efficiency_model,
+            "offtarget_mode": ("aggregate_cfd" if args.aggregate_offtarget
+                               else "single_mismatch_cfd"),
+            "pam_dimension": "collapsed" if args.collapse_pam else "enumerated",
             "editor_mode": "direct_only" if args.direct_only else "all_editors",
             "proxy_editors_excluded": list(proxy_editors) if args.direct_only else [],
             "n_loci_attempted": len(snvs),

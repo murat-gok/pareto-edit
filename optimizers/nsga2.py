@@ -100,6 +100,11 @@ class NSGA2(Optimizer):
         # proxy editors); fall back to the full chemistry-matched set if designs is empty.
         present = list(dict.fromkeys(d.editor for d in designs))
         self.editors = present or _all_ed
+        # Same treatment for PAMs: take the variants actually present in `designs`.
+        # Without this the optimizer searches all of PAM_VARIANTS regardless of what
+        # the pipeline enumerated, so a collapsed PAM dimension had no effect.
+        present_pams = list(dict.fromkeys(d.pam_variant for d in designs))
+        self.pams = present_pams or self.pams
         if not self.editors:
             raise ValueError("No editor chemistry matches this SNV's target base.")
         self.p_mut = self.p_mut or (1.0 / 3.0)

@@ -1,9 +1,9 @@
-# Core dependencies
+﻿# Core dependencies
 numpy>=1.26
 scipy>=1.11
 pandas>=2.0
 matplotlib>=3.7
-scikit-learn>=1.3        # experiments/train_efficiency_model.py (HistGradientBoosting, grouped split)
+scikit-learn==1.9.0        # experiments/train_efficiency_model.py (HistGradientBoosting, grouped split)
 requests>=2.31           # data/genome.py Ensembl REST fetch; fetch_be_datahive*.py
 pymoo>=0.6               # optional: HV/IGD cross-validation only
 

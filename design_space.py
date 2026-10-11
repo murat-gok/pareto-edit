@@ -154,7 +154,13 @@ class SNVContext:
         return "".join(w)
 
 
-def enumerate_designs(snv: SNVContext, exclude_editors=None) -> List[Design]:
+#: PAM used when the PAM dimension is collapsed. Matches the value already hard-coded in
+#: experiments/efficiency_recovery_run.py, so the two analyses agree.
+CANONICAL_PAM = "SpCas9-NGG"
+
+
+def enumerate_designs(snv: SNVContext, exclude_editors=None,
+                      collapse_pam: bool = False) -> List[Design]:
     """Enumerate all feasible designs for an SNV.
 
     Feasibility rule (phase-0): the editor's chemistry must be able to produce the desired
@@ -165,6 +171,20 @@ def enumerate_designs(snv: SNVContext, exclude_editors=None) -> List[Design]:
 
     exclude_editors: optional iterable of editor names to omit (e.g. proxy-mapped editors for a
     direct-model-only analysis).
+
+    collapse_pam: emit one design per (editor, position) using CANONICAL_PAM instead of the
+    full cross product over PAM_VARIANTS.
+
+    Why this option exists. No objective in the real-model composition reads
+    design.pam_variant: BE-Hive, CFD and DeepEfficiencyOracle all score the protospacer alone,
+    and only the surrogate consults it. Under that composition every PAM variant at a given
+    (editor, position) is an exact tie in objective space, so enumerating them multiplies the
+    reported front by |PAM_VARIANTS| and spends one redundant oracle call per duplicate.
+
+    Note also that no PAM feasibility check against the genome exists anywhere in this
+    codebase. PAMVariant carries a motif pattern, but nothing tests whether that motif is
+    present at a given placement, so PAM does not in fact constrain where the protospacer can
+    sit. Until such a check is implemented, collapsing the PAM dimension loses no information.
     """
     exclude = set(exclude_editors or ())
     designs: List[Design] = []
@@ -181,17 +201,19 @@ def enumerate_designs(snv: SNVContext, exclude_editors=None) -> List[Design]:
         # the admitted edit an actual CORRECTION rather than merely "an edit at the target".
         if tuple(ed.edit) != tuple(snv.required_edit):
             continue
-        for pam_name in PAM_VARIANTS:
+        pam_names = [CANONICAL_PAM] if collapse_pam else list(PAM_VARIANTS)
+        for pam_name in pam_names:
             for pos in range(OFFSET_RANGE[0], OFFSET_RANGE[1] + 1):
                 designs.append(Design(editor=ed_name, pam_variant=pam_name, target_pos=pos))
     return designs
 
 
-def search_bounds(snv: SNVContext, exclude_editors=None) -> Tuple[List[str], List[str], Tuple[int, int]]:
+def search_bounds(snv: SNVContext, exclude_editors=None,
+                  collapse_pam: bool = False) -> Tuple[List[str], List[str], Tuple[int, int]]:
     """Return the categorical levels + integer bounds the optimizer searches over,
     restricted to editors whose chemistry matches the SNV (and not in exclude_editors)."""
     exclude = set(exclude_editors or ())
     editors = [k for k, v in EDITORS.items()
                if tuple(v.edit) == tuple(snv.required_edit) and k not in exclude]
-    pams = list(PAM_VARIANTS.keys())
+    pams = [CANONICAL_PAM] if collapse_pam else list(PAM_VARIANTS.keys())
     return editors, pams, OFFSET_RANGE

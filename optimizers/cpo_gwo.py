@@ -52,9 +52,13 @@ class CPO_GWO(Optimizer):
         self.archive_max = archive_max
 
     # ----- continuous <-> Design ------------------------------------------ #
-    def _bounds(self, snv: SNVContext, present_editors=None):
+    def _bounds(self, snv: SNVContext, present_editors=None, present_pams=None):
         all_ed, self.pams, (self.off_lo, self.off_hi) = search_bounds(snv)
         self.editors = (list(dict.fromkeys(present_editors)) if present_editors else all_ed) or all_ed
+        # Take the PAM variants actually present in the enumerated designs; otherwise the
+        # optimizer searches all of PAM_VARIANTS no matter what the pipeline enumerated.
+        if present_pams:
+            self.pams = list(dict.fromkeys(present_pams)) or self.pams
         self.lb = np.array([0.0, 0.0, self.off_lo - 0.4999])
         self.ub = np.array([len(self.editors) - 1e-6, len(self.pams) - 1e-6, self.off_hi + 0.4999])
 
@@ -124,7 +128,8 @@ class CPO_GWO(Optimizer):
     def optimize(self, designs: List[Design], snv: SNVContext, eval_fn: EvalFn,
                  seed: int = 0) -> OptResult:
         rng = np.random.default_rng(seed)
-        self._bounds(snv, present_editors=[d.editor for d in designs])
+        self._bounds(snv, present_editors=[d.editor for d in designs],
+                     present_pams=[d.pam_variant for d in designs])
         if not self.editors:
             raise ValueError("No editor chemistry matches this SNV's target base.")
         self.n_evals = 0

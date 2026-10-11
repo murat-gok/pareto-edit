@@ -23,10 +23,15 @@ Usage:
       --efficiency-calibration efficiency_calibration.json --out-json tool_comparison.json
 """
 import argparse
+import os
 import sys
 import json
 import numpy as np
 from collections import Counter
+
+# Every other script in experiments/ does this; this one did not, so it only ran under
+# `python -m experiments.tool_comparison_run`. Added for consistency.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from design_space import SNVContext, PROTOSPACER_LEN
 from data.genome import GenomeContext
@@ -67,6 +72,15 @@ def main():
     ap.add_argument("--aggregate-offtarget", action="store_true")
     ap.add_argument("--ot-max-mismatches", type=int, default=2)
     ap.add_argument("--efficiency-calibration", default=None)
+    ap.add_argument("--efficiency-model", default=None,
+                    help="trained sequence-model pickle; efficiency then comes from "
+                         "DeepEfficiencyOracle instead of the surrogate")
+    ap.add_argument("--collapse-pam", action="store_true",
+                    help="one design per (editor, position); see design_space.enumerate_designs")
+    ap.add_argument("--direct-only", action="store_true",
+                    help="restrict to editors with a direct (non-proxy) BE-Hive model. Without "
+                         "this the comparison runs over a DIFFERENT candidate set than the "
+                         "Layer-2 application, which does exclude them.")
     ap.add_argument("--high-purity", type=float, default=0.50)
     ap.add_argument("--out-json", default=None)
     args = ap.parse_args()
@@ -86,11 +100,26 @@ def main():
                              aggregate=args.aggregate_offtarget,
                              max_mismatches=args.ot_max_mismatches)
     eff_cal = None
-    if args.efficiency_calibration:
-        from oracles.efficiency_calibration import CalibratedEfficiency
-        eff_cal = CalibratedEfficiency.load(args.efficiency_calibration)
-    oracle = CompositeOracle(efficiency_source=surrogate, purity_source=behive,
+    if args.efficiency_model:
+        from oracles.deep_efficiency import DeepEfficiencyOracle
+        eff_source = DeepEfficiencyOracle.from_pickle(args.efficiency_model)
+        print(f"Efficiency: sequence-trained model ({args.efficiency_model})")
+    else:
+        eff_source = surrogate
+        if args.efficiency_calibration:
+            from oracles.efficiency_calibration import CalibratedEfficiency
+            eff_cal = CalibratedEfficiency.load(args.efficiency_calibration)
+        print("Efficiency: surrogate  -- NOT the composition the manuscript describes; "
+              "pass --efficiency-model")
+    oracle = CompositeOracle(efficiency_source=eff_source, purity_source=behive,
                              offtarget_source=cfd, efficiency_calibrator=eff_cal)
+
+    from oracles.behive import BEHIVE_EDITOR_IS_PROXY
+    proxy_editors = tuple(e for e, p in BEHIVE_EDITOR_IS_PROXY.items() if p)
+    exclude = proxy_editors if args.direct_only else ()
+    print(f"Editor set: {'direct-model only' if args.direct_only else 'all editors'}"
+          f"{' (excluded: ' + ', '.join(proxy_editors) + ')' if args.direct_only else ''}")
+    print(f"PAM dimension: {'collapsed' if args.collapse_pam else 'enumerated'}")
 
     genome = GenomeContext(half_width=PROTOSPACER_LEN, offline=args.offline_genome)
 
@@ -116,7 +145,9 @@ def main():
 
     for snv, label in zip(snvs, labels):
         ok = attach_real_context(snv, genome)
-        pipe = ParetoEditPipeline(oracle=oracle, optimizer=NSGA2(pop_size=30, n_gen=20))
+        pipe = ParetoEditPipeline(oracle=oracle, optimizer=NSGA2(pop_size=30, n_gen=20),
+                                  exclude_editors=exclude,
+                                  collapse_pam=args.collapse_pam)
         try:
             res = pipe.run(snv, seed=0)
         except Exception as e:

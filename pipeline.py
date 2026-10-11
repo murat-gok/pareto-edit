@@ -37,9 +37,11 @@ class ParetoEditPipeline:
     optimizer: Optimizer
     exclude_editors: tuple = ()
     objective_mask: tuple = (0, 1, 2)   # which objectives the optimizer sees (0=eff,1=purity,2=offtgt)
+    collapse_pam: bool = False          # see design_space.enumerate_designs
 
     def run(self, snv: SNVContext, seed: int = 0) -> OptResult:
-        designs = enumerate_designs(snv, exclude_editors=self.exclude_editors)
+        designs = enumerate_designs(snv, exclude_editors=self.exclude_editors,
+                                    collapse_pam=self.collapse_pam)
         if not designs:
             raise ValueError("No feasible designs (editor chemistry mismatch with SNV).")
 
